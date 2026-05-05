@@ -1,0 +1,141 @@
+---
+title: "Students Performance Analysis"
+author: "Sana"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=TRUE}
+library(tidyverse)
+library(car)
+library(rstatix)
+library(psych)
+
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+# 1. Load the data
+
+```{r load-data}
+df <- read.csv("C:/Users/User/Downloads/StudentsPerformance.csv")
+head(df)
+colnames(df)
+```
+
+# 2. Data cleaning & preprocessing
+
+```{r preprocessing}
+df <- df %>%
+  mutate(
+    `Total Score` = math.score + reading.score + writing.score,
+    `Average Score` = `Total Score` / 3,
+    `Passing Status` = factor(ifelse(`Average Score` >= 60, "Pass", "Fail")),
+    gender = as.factor(gender),
+    lunch = as.factor(lunch),
+    `test.preparation.course` = as.factor(`test.preparation.course`),
+    `race.ethnicity` = as.factor(`race.ethnicity`),
+    `parental.level.of.education` = as.factor(`parental.level.of.education`)
+  )
+
+print(colSums(is.na(df)))
+
+zero_scorers <- df %>% 
+  filter(math.score == 0 | reading.score == 0 | writing.score == 0)
+
+n_zero <- nrow(zero_scorers)
+cat("Number of students with at least one zero score:", n_zero, "\n")
+if(n_zero > 0) head(zero_scorers)
+```
+
+# 3. Descriptive statistics
+
+```{r descriptives}
+describe(df[, c("math.score", "reading.score", "writing.score", "Total Score")])
+
+par_table <- table(df$`parental.level.of.education`)
+par_table
+prop.table(par_table) * 100
+```
+
+# 4. Visualizations
+
+```{r plots, fig.width=7, fig.height=5}
+ggplot(df, aes(x = `Total Score`)) +
+  geom_histogram(binwidth = 20, fill = "skyblue", color = "black") +
+  geom_density(aes(y = after_stat(count * 20)), color = "red") +
+  labs(title = "Distribution of Total Student Performance Scores", 
+       x = "Total Score (0-300)", y = "Frequency")
+
+ggplot(df, aes(x = `parental.level.of.education`)) +
+  geom_bar(fill = "orange") +
+  coord_flip() +
+  labs(title = "Distribution of Parental Education Levels", 
+       x = "Parental Education", y = "Count")
+
+ggplot(df, aes(x = lunch, y = math.score, fill = lunch)) +
+  geom_boxplot() +
+  labs(title = "Math Score Distribution by Lunch Type", 
+       x = "Lunch Type", y = "Math Score")
+
+ggplot(df, aes(x = reading.score, y = writing.score)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm") +
+  labs(title = "Relationship between Reading and Writing Scores",
+       x = "Reading Score", y = "Writing Score")
+```
+
+# 5. Inferential statistics
+
+## A. T-test
+
+```{r ttest}
+leveneTest(`Total Score` ~ `test.preparation.course`, data = df)
+t_result <- t.test(`Total Score` ~ `test.preparation.course`, data = df, var.equal = FALSE)
+print(t_result)
+```
+
+## B. ANOVA
+
+```{r anova}
+levene_result <- leveneTest(math.score ~ race.ethnicity, data = df)
+print(levene_result)
+
+anova_model <- aov(math.score ~ race.ethnicity, data = df)
+summary(anova_model)
+
+TukeyHSD(anova_model)
+```
+
+## C. Chi-square
+
+```{r chisq}
+cont_table <- table(df$gender, df$`Passing Status`)
+cont_table
+chisq.test(cont_table)
+```
+
+# 6. Correlation & Regression
+
+## A. Correlation
+
+```{r correlation}
+numerical_vars <- df[, c("math.score", "reading.score", "writing.score", "Total Score")]
+cor_matrix <- cor(numerical_vars)
+round(cor_matrix, 2)
+
+pairs.panels(numerical_vars)
+```
+
+## B. Regression
+
+```{r regression}
+reg_model <- lm(`Total Score` ~ math.score + reading.score + `test.preparation.course` + lunch, data = df)
+
+summary(reg_model)
+anova(reg_model)
+
+par(mfrow = c(1,2))
+plot(reg_model, which = 1)
+plot(reg_model, which = 2)
+par(mfrow = c(1,1))
+```
